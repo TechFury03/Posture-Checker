@@ -1,7 +1,7 @@
 import cv2
 import spinepose
 from torch import cuda
-from mp_wrapper import MPLandmarks
+from keypoints_enum import keypoints_enum
 
 DEVICE = 'auto' if cuda.is_available() else 'cpu'
 BACKEND = 'onnxruntime' #openvino (spinepose default) gave issues during testing
@@ -25,7 +25,6 @@ def detectLandmarks(
     if not cap.isOpened():
         print(f"Unable to open camera {camera_idx}")
         return
-
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -33,19 +32,46 @@ def detectLandmarks(
 
         rgb_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        keypoints, scores = estimator(rgb_img)
+        poses, scores = estimator(rgb_img)
 
-        # Wrap keypoints so old code keeps working
-        # landmarks = MPLandmarks(keypoints, frame.shape)
-
-        # if callback is not None:
-        #     callback(landmarks, frame)
-
-        # OPTIONAL: show visualized output
-        vis = estimator.visualize(rgb_img, keypoints, scores)
-        cv2.imshow("Raw SpinePose Output", cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+        if callback is not None:
+            callback(
+                frame=frame,
+                poses=poses[:1], # only the first person, TODO figure out to determine this is the "subject"
+                scores=scores,
+                estimator=estimator)
 
         if cv2.waitKey(1) & 0xFF in (ord('q'), 27):
             break
     cap.release()
     cv2.destroyAllWindows()
+
+def print_dbg_info(keypoints, scores, i=-1):
+    """
+    Prints the coordinates and score of every joint (name, not index)
+    """
+    assert len(keypoints.shape) == 2 # make sure this is of just 1 person
+    if (i >= 0):
+      print(f"Frame {i}: ", end='')
+    print(f"Detected {len(keypoints)} people")
+    if (len(keypoints) > 0):
+        print(f"  Found {len(keypoints[0])} joints in person 1: {keypoints[0]}")
+        print(f"  Example joint (nose) 0 (x,y): {keypoints[0][0]}, score: {scores[0][0]}")
+        print(f"  Left ankle (joint 15) (x,y): {keypoints[0][15]}, score: {scores[0][15]}")
+        # all joints for person 1
+        for j, kp in enumerate(keypoints[0]):
+            print(f"    Joint {keypoints_enum[j]:<20} (x,y): {kp}, score: {scores[0][j]}")
+
+def cap_and_hold_one_img(cap, estimator):
+    # capture just 1 img (and keep that alive until esc is pressed):
+    ret, frame = cap.read()
+    if ret:
+        rgb_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        keypoints, scores = estimator(rgb_img)
+        print_dbg_info(keypoints, scores)
+        vis = estimator.visualize(rgb_img, keypoints, scores)
+        cv2.imshow("Raw SpinePose Output", cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+    while (True):
+        k = cv2.waitKey(1)
+        if k%256 == 27:
+            break
