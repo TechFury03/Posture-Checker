@@ -2,6 +2,8 @@ import argparse
 from landmark import detectLandmarks
 from posture import evaluate_posture
 from functools import partial
+from notification import notify_user
+
 
 # Entry point of the program    
 def main(
@@ -33,6 +35,12 @@ if __name__ == "__main__":
     parser.add_argument("--annotate", action="store_true", help="Annotate landmark indices for debugging")
     parser.add_argument("--headless", action="store_true", help="Run in headless mode (no GUI)")
     args = parser.parse_args()
+    
+    notify_user(
+        title="Posture Checker",
+        message="Posture Checker is starting...",
+        duration=5
+    )
 
     width = args.width if args.width > 0 else None
     main(
