@@ -1,66 +1,124 @@
-from display import display_frame
-import cv2
+# posture.py (Front + Side View, dynamic front view)
 import math
-from mediapipe.python.solutions.pose import PoseLandmark
+import cv2
+from display import display_frame
 
-def evaluate_posture(
-    landmarks,
-    frame,
-    headless=False,
-    annotate=False,
-    mirror=False,
-    resize_width=None
-):
-    if landmarks is not None:
+# EMA smoothing storage
+smoothed_scores = {
+    "total": None
+}
+ALPHA = 0.3  # smoothing factor for EMA
+
+def get_xy(lm, w, h):
+    return (lm.x * w, lm.y * h)
+
+def smooth_score(prev, current):
+    if prev is None:
+        return current
+    return ALPHA * current + (1 - ALPHA) * prev
+
+def overlay_score(frame, score):
+    """Draw vertical score bar only"""
+    h, w, _ = frame.shape
+    bar_height = int(h * score / 100)
+
+    # Color: red <50, yellow 50–75, green >75
+    if score < 50:
+        color = (0, 0, 255)
+    elif score < 75:
+        color = (0, 255, 255)
+    else:
+        color = (0, 255, 0)
+
+    cv2.rectangle(frame, (w-50, h-bar_height), (w-20, h), color, -1)
+    cv2.putText(frame, f"{int(score)}", (w-70, h-bar_height-10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
+# ---------------- Front-View Function ----------------
+def evaluate_posture(landmarks, frame, annotate=False, mirror=True, resize_width=None, headless=False):
+    """
+    Front view posture based on nose-to-shoulder distance with dynamic scaling
+    """
+    if landmarks:
+        h, w = frame.shape[:2]
         lm = landmarks.landmark
 
-        # Extract key 2D points
-        ear = lm[PoseLandmark.LEFT_EAR]
-        shoulder = lm[PoseLandmark.LEFT_SHOULDER]
-        hip = lm[PoseLandmark.LEFT_HIP]
-        knee = lm[PoseLandmark.LEFT_KNEE]
+        # Nose and shoulders
+        nose = get_xy(lm[0], w, h)
+        left_shoulder = get_xy(lm[11], w, h)
+        right_shoulder = get_xy(lm[12], w, h)
 
-        # Convert to normalized 2D coordinates
-        def pt(lm): return (lm.x, lm.y)
+        # Midpoint between shoulders
+        mid_shoulder = ((left_shoulder[0] + right_shoulder[0]) / 2,
+                        (left_shoulder[1] + right_shoulder[1]) / 2)
 
+        # Shoulder width as reference distance
+        shoulder_width = math.sqrt((left_shoulder[0]-right_shoulder[0])**2 +
+                                   (left_shoulder[1]-right_shoulder[1])**2)
+
+        # Distance from nose to shoulder midpoint
+        dx = nose[0] - mid_shoulder[0]
+        dy = nose[1] - mid_shoulder[1]
+        distance = math.sqrt(dx**2 + dy**2)
+
+        # Dynamic scaling factor
+        max_good_distance = shoulder_width * 1.2  # tweak factor if needed
+
+        # Compute score: smaller distance = better posture
+        score = max(0, 100 - (distance / max_good_distance * 100))
+        score = min(score, 100)
+
+        # Smooth score
+        smoothed_scores["total"] = smooth_score(smoothed_scores.get("total"), score)
+
+        # Overlay score only
+        overlay_score(frame, smoothed_scores["total"])
+
+    display_frame(frame, landmarks, annotate=annotate, headless=headless)
+
+# ---------------- Side-View Function ----------------
+def evaluate_posture_side_view(landmarks, frame, annotate=False, mirror=True, resize_width=None, headless=False):
+    """
+    Side view posture evaluation for left side of the body
+    """
+    if landmarks:
+        h, w = frame.shape[:2]
+        lm = landmarks.landmark
+
+        # Side view landmarks
+        ear = get_xy(lm[7], w, h)
+        shoulder = get_xy(lm[11], w, h)
+        hip = get_xy(lm[23], w, h)
+        knee = get_xy(lm[25], w, h)
+
+        # Angle calculations
         def angle(a, b, c):
-            ab = (a[0]-b[0], a[1]-b[1])
-            cb = (c[0]-b[0], c[1]-b[1])
+            ax, ay = a
+            bx, by = b
+            cx, cy = c
+            ab = (ax - bx, ay - by)
+            cb = (cx - bx, cy - by)
             dot = ab[0]*cb[0] + ab[1]*cb[1]
             mag_ab = math.sqrt(ab[0]**2 + ab[1]**2)
             mag_cb = math.sqrt(cb[0]**2 + cb[1]**2)
-            return math.degrees(math.acos(dot / (mag_ab * mag_cb)))
+            if mag_ab * mag_cb == 0:
+                return 0
+            cos_angle = dot / (mag_ab * mag_cb)
+            cos_angle = max(-1, min(1, cos_angle))
+            return math.degrees(math.acos(cos_angle))
 
-        # 1 Head alignment (horizontal distance)
-        head_offset = abs(ear.x - shoulder.x)
-        head_score = max(0, 100 - head_offset * 1000)  # tune scaling
+        neck_angle = angle(ear, shoulder, hip)
+        back_angle = angle(shoulder, hip, knee)
 
-        # 2 Torso angle (shoulder–hip–knee)
-        torso_angle = angle(pt(shoulder), pt(hip), pt(knee))
-        torso_score = max(0, 100 - abs(180 - torso_angle))
+        # Convert to score
+        neck_score = max(0, 100 - abs(neck_angle - 180))
+        back_score = max(0, 100 - abs(back_angle - 180))
+        total_score = 0.5 * neck_score + 0.5 * back_score
 
-        # 3 Shoulder slouch (shoulder too far forward)
-        shoulder_offset = abs(shoulder.x - hip.x)
-        shoulder_score = max(0, 100 - shoulder_offset * 500)
+        # Smooth score
+        smoothed_scores["total"] = smooth_score(smoothed_scores.get("total"), total_score)
 
-        # Weighted posture score
-        posture_score = 0.4 * head_score + 0.4 * torso_score + 0.2 * shoulder_score
-        posture_score = int(max(0, min(100, posture_score)))
+        # Overlay score only
+        overlay_score(frame, smoothed_scores["total"])
 
-        # Draw result on frame
-        cv2.putText(frame, f"Score: {posture_score}", (30, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-        # Optionally show metrics
-        cv2.putText(frame, f"Head: {int(head_score)}  Torso: {int(torso_score)}  Shoulder: {int(shoulder_score)}",
-                    (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 3) # outline
-        cv2.putText(frame, f"Head: {int(head_score)}  Torso: {int(torso_score)}  Shoulder: {int(shoulder_score)}",
-                    (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-    if not headless:
-        display_frame(
-            frame,
-            landmarks,
-            annotate=annotate,
-            mirror=mirror,
-            resize_width=resize_width,
-        )
+    display_frame(frame, landmarks, annotate=annotate, headless=headless)
