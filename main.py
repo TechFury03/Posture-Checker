@@ -48,7 +48,14 @@ def main(camera_idx=0, mirror=True, resize_width=960, annotate=False, headless=F
 
             # Call the correct posture evaluation function
             callback_func = view_functions[current_view]
-            callback_func(landmarks, frame, annotate=annotate, headless=headless, mirror=mirror, resize_width=resize_width)
+            callback_func(
+                landmarks, 
+                frame, 
+                annotate=annotate, 
+                headless=headless, 
+                mirror=mirror, 
+                resize_width=resize_width
+            )
 
             if not headless:
                 # Display current view on the frame
@@ -66,7 +73,6 @@ def main(camera_idx=0, mirror=True, resize_width=960, annotate=False, headless=F
 
     cap.release()
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Posture Checker with view toggle")

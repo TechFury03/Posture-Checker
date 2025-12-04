@@ -1,6 +1,4 @@
 argparse
 opencv-python
 mediapipe
-spinepose
-win10toast
 plyer
