@@ -4,8 +4,6 @@ import cv2
 from display import display_frame
 from notification import notify_user
 
-
-
 # EMA smoothing storage
 smoothed_scores = {
     "total": None
@@ -23,7 +21,6 @@ def smooth_score(prev, current):
 bad_posture_notified = False
 def overlay_score(frame, score):
     global bad_posture_notified
-    """Draw vertical score bar only"""
     h, w, _ = frame.shape
     bar_height = int(h * score / 100)
 
@@ -45,7 +42,7 @@ def overlay_score(frame, score):
     cv2.putText(frame, f"{int(score)}", (w-70, h-bar_height-10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-# ---------------- Front-View Function ----------------
+# Front-view
 def evaluate_posture(landmarks, frame, annotate=False, mirror=True, resize_width=None, headless=False):
     """
     Front view posture based on nose-to-shoulder distance with dynamic scaling
@@ -73,10 +70,10 @@ def evaluate_posture(landmarks, frame, annotate=False, mirror=True, resize_width
         distance = math.sqrt(dx**2 + dy**2)
 
         # Dynamic scaling factor
-        max_good_distance = shoulder_width * 1.2  # tweak factor if needed
+        max_good_distance = shoulder_width * 0.8
 
         # Compute score: smaller distance = better posture
-        score = max(0, 100 - (distance / max_good_distance * 100))
+        score = max(0, 100 * (distance / max_good_distance))
         score = min(score, 100)
 
         # Smooth score
@@ -87,7 +84,7 @@ def evaluate_posture(landmarks, frame, annotate=False, mirror=True, resize_width
 
     display_frame(frame, landmarks, annotate=annotate, headless=headless)
 
-# ---------------- Side-View Function ----------------
+# Side-view
 def evaluate_posture_side_view(landmarks, frame, annotate=False, mirror=True, resize_width=None, headless=False):
     """
     Side view posture evaluation for left side of the body

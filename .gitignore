@@ -1,6 +1,7 @@
 # Posture Checker specific ignores
 .pc_venv
 pc_venv/
+post_venv/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
