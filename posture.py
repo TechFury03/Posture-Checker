@@ -2,6 +2,9 @@
 import math
 import cv2
 from display import display_frame
+from notification import notify_user
+
+
 
 # EMA smoothing storage
 smoothed_scores = {
@@ -17,7 +20,9 @@ def smooth_score(prev, current):
         return current
     return ALPHA * current + (1 - ALPHA) * prev
 
+bad_posture_notified = False
 def overlay_score(frame, score):
+    global bad_posture_notified
     """Draw vertical score bar only"""
     h, w, _ = frame.shape
     bar_height = int(h * score / 100)
@@ -25,9 +30,15 @@ def overlay_score(frame, score):
     # Color: red <50, yellow 50–75, green >75
     if score < 50:
         color = (0, 0, 255)
+        if not bad_posture_notified:
+            notify_user("Posture Checker", "Better fix your posture, OR ELSE", duration=5)
+            bad_posture_notified = True
     elif score < 75:
         color = (0, 255, 255)
     else:
+        if bad_posture_notified:
+            notify_user("Posture Checker", "Good job, your posture has been fixed", duration=5)
+            bad_posture_notified = False
         color = (0, 255, 0)
 
     cv2.rectangle(frame, (w-50, h-bar_height), (w-20, h), color, -1)
