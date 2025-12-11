@@ -16,19 +16,18 @@ git clone https://github.com/TechFury03/Posture-Checker.git
 ### 2. Virtual Environment
 Next, create a virtual environment so the dependencies do not potentionally conflict with global dependencies on your system:
 ```bash
-python -m venv post_venv
+python -m venv venv
 ```
-Here we call our virtual environment `pc_venv`, short for Posture Checker Virtual Environment. 
 Now we need to start our virtual environment:
 
 #### Windows
 ```bash
-pc_venv\Scripts\activate
+venv\Scripts\activate
 ```
 
 #### Linux/macOS
 ```bash
-source pc_venv/bin/activate
+source venv/bin/activate
 ```
 
 ### 3. Install Dependencies
