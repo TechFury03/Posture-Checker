@@ -27,6 +27,7 @@ bad_posture_notified = False
 good_posture_notified = False
 
 def overlay_score(frame, score):
+    """Overlay posture score bar and handle notifications"""
     global current_zone, zone_enter_time
     global bad_posture_notified, good_posture_notified
 
@@ -165,6 +166,7 @@ def smooth_plateau_score(angle, ideal_min, ideal_max, soft_limit=5, hard_drop=15
 
 # Side-view
 def evaluate_posture_side_view(landmarks, frame, annotate=False, mirror=True, resize_width=None, headless=False):
+    """Side view posture based on neck and back angles"""
     if not landmarks:
         return
 
