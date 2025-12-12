@@ -163,12 +163,50 @@ def smooth_plateau_score(angle, ideal_min, ideal_max, soft_limit=5, hard_drop=15
     return max(0, min(100, score))
 
 
+# Visibility warning state
+last_visibility_warning = 0
+VISIBILITY_COOLDOWN = 10  # seconds
+
+
+def check_leg_visibility(landmarks, frame):
+    """
+    Check whether hip (23) and knee (25) are detected with good visibility.
+    Returns True if they are OK, False if warning should be shown.
+    """
+
+    global last_visibility_warning
+
+    hip_vis = landmarks.landmark[23].visibility
+    knee_vis = landmarks.landmark[25].visibility
+
+    # Threshold: below ~0.5 means low confidence
+    VISIBLE_THRESHOLD = 0.3
+
+    visible = (hip_vis > VISIBLE_THRESHOLD and knee_vis > VISIBLE_THRESHOLD)
+
+    if not visible:
+        now = time.time()
+
+        # Avoid spamming notifications
+        if now - last_visibility_warning > VISIBILITY_COOLDOWN:
+            notify_user(
+                title="Posture Checker",
+                message="Move into frame: please ensure your hip and knee are visible.",
+                duration=10
+            )
+            last_visibility_warning = now
+
+    return visible
+
+
 
 # Side-view
 def evaluate_posture_side_view(landmarks, frame, annotate=False, mirror=True, resize_width=None, headless=False):
     """Side view posture based on neck and back angles"""
     if not landmarks:
         return
+
+    check_leg_visibility(landmarks, frame) # warn if hips and knees are not visible
 
     h, w = frame.shape[:2]
     lm = landmarks.landmark
@@ -194,12 +232,6 @@ def evaluate_posture_side_view(landmarks, frame, annotate=False, mirror=True, re
 
     neck_angle = angle(ear, shoulder, hip)
     back_angle = angle(shoulder, hip, knee)
-
-    # Debug overlay
-    cv2.putText(frame, f"Neck Angle: {int(neck_angle)}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(frame, f"Back Angle: {int(back_angle)}", (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
     # Ideal ranges
     NECK_MIN = 135
